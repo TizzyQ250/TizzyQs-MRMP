@@ -1,0 +1,2 @@
+# Preserve the Windows launcher's CRLF bytes in checkouts and source archives.
+/start.bat -text

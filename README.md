@@ -2,16 +2,25 @@
 
 **TizzyQ's MRMP** · 微气候研究建模程序 · Windows 本地 Web 应用
 
+**简体中文** · [English](README.en.md)
+
+TizzyQ's MRMP is a local research tool for preparing satellite mosaics, reviewing building footprints, and generating CAD drawings and village massing models for microclimate and wind studies. [Read the English guide](README.en.md).
+
 这是一个本地运行的研究前处理工具，面向“卫星影像 → 建筑轮廓 → CAD 核查 → 照片层高 → 村落白模”的工作流。HTML/JavaScript 前端负责地图与交互，Python 本地服务负责瓦片拼接、照片 EXIF 读取及 CAD/模型文件生成。
 
-当前版本：`0.3.0`。这是研究辅助工具，不是经过测绘认证的建筑识别系统；卫星影像候选轮廓需要人工核查。
+当前版本为 `0.3.0`。卫星影像生成的建筑候选轮廓需人工核查后再用于研究建模。
 
 ## 环境与启动
 
-- Windows 10/11，Python 3.11 或更新版本；其他系统可尝试手动启动，但当前发布版只在 Windows 测试。
-- 安装依赖：`python -m pip install -r requirements.txt`。
-- 可选：`python -m pip install opencv-python`，启用 OpenCV 屋顶候选识别；未安装时仍可使用 NumPy 简化识别和手工描边。
-- 建议使用可以访问所选地图服务的网络。界面资源已放在 `static/vendor/`，不依赖前端 CDN。
+- 面向 Windows 10/11，已在 Python 3.11 环境验证。界面为简体中文。
+- 从 GitHub 克隆仓库，或选择 **Code → Download ZIP** 后解压。在源码根目录安装依赖。
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+- 可安装 `opencv-python` 启用 OpenCV 屋顶候选识别。未安装时仍可使用 NumPy 简化识别和手工描边。
+- 地图瓦片、高清拼图下载和 OSM 查询需要网络。前端绘图库随源码提供，保存在 `static/vendor/`。
 
 双击 `start.bat`，稍等约 2 秒，浏览器会打开：
 
@@ -25,9 +34,9 @@
 python app.py --host 127.0.0.1 --port 8765
 ```
 
-打开浏览器访问 <http://127.0.0.1:8765>。服务只监听本机回环地址。首次启动会创建 `data/projects`、`data/exports` 和 `data/jobs`。
+打开浏览器访问 <http://127.0.0.1:8765>。默认配置只监听本机回环地址。首次启动会创建 `data/projects`、`data/exports` 和 `data/jobs`。若端口已被占用，可用 `--port` 指定其他端口并访问对应地址。
 
-如使用 Windows 便携版，解压**整个**文件夹并双击其中的 `启动 TizzyQ.bat`；便携版自带 Python 和图像处理依赖。请勿只复制 EXE。
+GitHub 的 **Download ZIP** 提供源码。已有 Windows 便携版的用户可按[便携版使用说明](便携版使用说明.txt)启动。仓库提供 `TizzyQ-Microclimate-Portable.spec`，可在已安装项目依赖和 PyInstaller 的 Windows 环境中执行 `python -m PyInstaller TizzyQ-Microclimate-Portable.spec` 构建。使用时保留 `dist/TizzyQ-Microclimate-Portable/` 的完整目录，可将 `start.bat` 复制到 EXE 同级目录作为启动入口。
 
 ## 当前可用流程
 
@@ -44,20 +53,15 @@ python app.py --host 127.0.0.1 --port 8765
 
 ## 导出标准
 
-- 坐标：地图与 GeoJSON 使用 WGS84；CAD/模型转为以研究区西南角附近为原点的本地米制坐标。
-- 比例：DXF、DWG、SKP、OBJ、FBX 的几何始终是 **1:1 真实米制**。1:100、1:200 等仅为 CAD 出图记录，不缩放几何。
-- 精度：可选 1 m、0.1 m、0.01 m 或 0.001 m；研究默认推荐 0.1 m。
-- CAD：每栋建筑是闭合多段线，并按分区与来源写入 `BLDG_*_MANUAL`、`BLDG_*_AI`、`BLDG_*_OSM` 图层。
-- 白模：每栋建筑独立成块；SKP 结构为 `TizzyQ_Buildings_1to1m → 分区组 → 来源组 → 单栋组`。
-- 层高：当前程序默认单层高度 3.3 m；这只是建模初值，既有建筑应根据现场照片或实测数据逐栋修正。锁定总高度后，批量层高和照片回写不会覆盖该栋。
-- 无需商业软件的导出：GeoJSON、DXF、OBJ、PNG 和程序生成的 FBX ASCII 文件。
-- FBX：优先调用 SketchUp 原生 FBX 导出；未检测到 SketchUp 时回退为 FBX ASCII 7.4。
-- DWG：检测到本机 AutoCAD Core Console 时，由 DXF 自动转换。
-- SKP：检测到本机 SketchUp 时，通过 SketchUp Ruby API 创建嵌套组和完整封闭体并保存。
+- 建筑 GeoJSON 使用 WGS84 经度和纬度。CAD 与模型以导出轮廓顶点的最小经度、最小纬度为原点，使用 **1:1 本地米制坐标**。1:100、1:200 等是 CAD 出图记录，几何维持 1:1。
+- DXF、DWG、OBJ 和 FBX ASCII 可按 1 m、0.1 m、0.01 m 或 0.001 m 输出，默认 0.1 m。当前 SketchUp 原生 SKP 和 FBX 路径使用 0.1 m。这里的精度指坐标舍入间隔，影像及实测数据的误差需要另行评估。
+- DXF 中每栋建筑为闭合多段线，按分区和来源写入 `BLDG_*_MANUAL`、`BLDG_*_AI` 或 `BLDG_*_OSM` 图层。SketchUp 白模按 `TizzyQ_Buildings_1to1m → 分区组 → 来源组 → 单栋组` 组织。
+- 界面的建议单层高度初始值为 3.0 m，可根据现场照片或实测数据逐栋修正。锁定总高度后，批量层高和照片回写会保留该栋高度。
+- PNG、GeoJSON、DXF、OBJ 和 FBX ASCII 无需商业软件。DWG 转换需要本机 AutoCAD Core Console。原生 SKP 需要 SketchUp，FBX 优先调用 SketchUp，调用失败时回退到 FBX ASCII 7.4。
 
 ## 精度与研究边界
 
-“影像预描边”是候选生成器，不是最终测绘成果。卫星图中的树冠、棚顶、道路高光会造成误判；最终 DWG/SKP/FBX 只导出用户标记为“已核查”的闭合轮廓。对风环境模拟来说，应重点检查：
+树冠、棚顶和道路高光可能被影像预描边识别为建筑。界面只导出标记为“已核查”且通过几何审计的建筑轮廓。用于风环境模拟前应重点检查以下内容。
 
 - 建筑是否缺失或把相邻建筑误合并；
 - 建筑外轮廓是否闭合；
@@ -67,9 +71,9 @@ python app.py --host 127.0.0.1 --port 8765
 
 ## 地图许可
 
-软件提供地图预览和瓦片拼接技术能力，但瓦片影像仍受各地图服务的许可和署名要求约束。正式研究成果请使用你有权下载和再利用的数据源，或在界面后续版本中接入自有 XYZ/WMTS 服务。
+瓦片影像和地图数据遵循各服务的许可与署名要求。正式研究成果请使用你有权下载和再利用的数据源，界面也支持配置授权的 HTTPS XYZ 瓦片服务。
 
-软件会拒绝低方差“暂无影像”占位瓦片，避免把空白或放大后的低清图误当成高清成果。若 Google 在浏览器可见但本地 Python 网络无法直连，请换用有真实影像的授权源或自有 XYZ 服务；程序不会伪造清晰度。
+软件会拒绝低方差的“暂无影像”占位瓦片。若底图在浏览器可见，但本地 Python 无法连接该服务或下载瓦片，请切换到可访问的授权数据源。
 
 ## 仓库结构与数据边界
 
