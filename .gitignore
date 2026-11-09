@@ -1,0 +1,28 @@
+# Local research data, GPS photos, generated models, and map imagery
+data/
+AAA-打包/
+build-portable/
+
+# Python and build artifacts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+*.log
+
+# Editor and OS files
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local credentials and machine-specific configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key

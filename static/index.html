@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="卫星影像选区、高清瓦片拼接、建筑轮廓核查、CAD 与村落白模导出的本地研究工具。">
+  <title>TizzyQ's MRMP · 微气候研究建模程序</title>
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/static/vendor/leaflet-draw/leaflet.draw.css">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="TizzyQ's Microclimate Research Modeling Program">
+        <span class="brand-mark">TQ</span>
+        <span class="brand-copy"><strong>TIZZYQ'S MRMP</strong><small>影像 · CAD · MASSING / 01</small></span>
+      </a>
+      <div class="project-strip">
+        <label for="projectSelect">研究项目</label>
+        <select id="projectSelect" aria-label="打开已有工程"><option value="">新建 / 最近工程</option></select>
+        <input id="projectName" data-testid="project-name" value="大西村微气候风环境" maxlength="80">
+        <button class="button ghost compact" id="newProjectBtn">新建</button>
+        <button class="button ghost" id="saveProjectBtn" data-testid="save-project">保存工程</button>
+        <button class="button ghost compact" id="projectToolsBtn" aria-controls="projectDrawer">文件</button>
+        <button class="button ghost compact" id="themeBtn" aria-controls="themeDrawer">界面</button>
+        <span class="autosave-status" id="autosaveStatus"><i></i>已自动保存</span>
+      </div>
+      <div class="system-status">
+        <span class="status-dot" id="serverDot"></span>
+        <span><strong id="serverStatus">连接本地引擎</strong><small id="systemDetail">检查导出能力…</small></span>
+      </div>
+    </header>
+
+    <aside class="workflow" aria-label="建模工作流">
+      <div class="workflow-title"><span>PIPELINE</span><b>研究前处理</b></div>
+      <nav id="workflowNav">
+        <button class="workflow-step active" data-step="1" data-testid="step-select"><i>01</i><span><b>研究选区</b><small>点位 / 底图 / 边界</small></span></button>
+        <button class="workflow-step" data-step="2" data-testid="step-mosaic"><i>02</i><span><b>高清卫图</b><small>瓦片 / 精度 / 拼接</small></span></button>
+        <button class="workflow-step" data-step="3" data-testid="step-trace"><i>03</i><span><b>建筑识别</b><small>对齐 / 预描边 / 过滤</small></span></button>
+        <button class="workflow-step" data-step="4" data-testid="step-verify"><i>04</i><span><b>CAD 核查</b><small>闭合 / 误判 / 0.1 m</small></span></button>
+        <button class="workflow-step" data-step="5" data-testid="step-photo"><i>05</i><span><b>照片层高</b><small>EXIF / 点位 / 层数</small></span></button>
+        <button class="workflow-step" data-step="6" data-testid="step-model"><i>06</i><span><b>白模输出</b><small>DWG / FBX / SKP</small></span></button>
+      </nav>
+      <div class="workflow-foot">
+        <span>坐标基准</span><b>WGS84 → LOCAL M</b><small>CAD 原点写入文件头</small>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <section class="map-stage" aria-label="研究地图与核查窗口">
+        <div id="map" data-testid="map"></div>
+        <canvas id="modelCanvas" class="model-canvas" aria-label="村落白模预览"></canvas>
+        <div class="map-top-controls">
+          <div class="map-control-block search-block">
+            <input id="locationSearch" placeholder="输入经纬度，如 24.690, 98.590" aria-label="经纬度">
+            <button id="locateBtn" data-testid="locate">定位</button>
+          </div>
+          <div class="map-control-block">
+            <label for="providerSelect">底图</label>
+            <select id="providerSelect" data-testid="provider-select">
+              <option value="google_sat">Google 卫星（默认）</option>
+            </select>
+          </div>
+          <button class="detail-mode-btn" id="highDetailBtn" title="放大并等待最高精度瓦片加载">高清核查</button>
+        </div>
+        <div class="tile-load-status" id="tileLoadStatus"><i></i><span>瓦片就绪</span></div>
+        <div class="coordinate-readout"><span id="cursorCoords">—</span><b id="mapZoom">Z 16</b></div>
+        <div class="north-arrow" aria-hidden="true"><span>N</span><i></i></div>
+        <div class="stage-mode" id="stageMode"><span>MAP / 2D</span><small>卫星影像与建筑轮廓同屏核查</small></div>
+        <button class="map-switch" id="mapSwitchBtn" hidden>返回二维地图</button>
+      </section>
+
+      <section class="summary-band" aria-label="当前工程摘要">
+        <article><small>研究区</small><strong id="summaryArea">未框选</strong><span id="summaryBounds">请先绘制绿色矩形</span></article>
+        <article><small>瓦片计划</small><strong id="summaryTiles">0 tiles</strong><span id="summaryResolution">精度待计算</span></article>
+        <article><small>建筑轮廓</small><strong id="summaryBuildings">0 栋</strong><span id="summaryVerified">0 已核查</span></article>
+        <article><small>照片点位</small><strong id="summaryPhotos">0 张</strong><span id="summaryGps">0 含 GPS</span></article>
+      </section>
+    </main>
+
+    <aside class="inspector" aria-label="步骤参数与检查器">
+      <div class="inspector-head">
+        <div><small id="panelKicker">STEP 01</small><h1 id="panelTitle">研究区域选取</h1></div>
+        <span class="phase-tag" id="phaseTag">准备</span>
+      </div>
+
+      <section class="step-panel active" data-panel="1">
+        <p class="panel-lead">在地图上画一个矩形作为研究边界。绿色外框是最终输出范围，后续所有影像、CAD 与白模共享这一边界。</p>
+        <div class="instruction-card">
+          <span class="instruction-no">A</span><div><b>绘制研究框</b><p>点击右侧地图上的矩形工具，拖拽框选。重新绘制会替换旧范围。</p></div>
+        </div>
+        <button class="button primary wide" id="startRectangleBtn" data-testid="draw-region">开始框选研究区域</button>
+        <div class="nested-boundary-card">
+          <div><small>BOUNDARY / B</small><b>异形村落识别边界</b><p>在矩形研究区内部沿村落边缘逐点绘制；建筑识别只保留该异形范围内的候选。</p></div>
+          <button class="button outline" id="drawVillageBoundaryBtn">绘制异形边界</button>
+          <button class="button outline" id="clearVillageBoundaryBtn">清除</button>
+          <span id="villageBoundaryStatus">尚未设置，默认识别整个矩形</span>
+        </div>
+        <div class="field-grid two">
+          <label>西经度<input id="boundWest" readonly value="—"></label>
+          <label>东经度<input id="boundEast" readonly value="—"></label>
+          <label>南纬度<input id="boundSouth" readonly value="—"></label>
+          <label>北纬度<input id="boundNorth" readonly value="—"></label>
+        </div>
+        <div class="notice"><b>坐标提醒</b><span>Google / Esri 使用 WGS84；高德、腾讯在中国境内为 GCJ-02，百度为 BD-09。正式 CAD 请优先使用 WGS84 影像并在同一坐标基准下核查。</span></div>
+        <details class="advanced-source"><summary>自定义 XYZ 瓦片源</summary><label>地址模板<input id="customTileUrl" placeholder="https://.../{z}/{x}/{y}.png"></label><div class="button-pair"><button class="button outline" id="applyCustomTileBtn">预览</button><button class="button outline" id="saveCustomTileBtn">保存到本机</button></div></details>
+        <button class="button dark wide next-step" data-next="2">确认选区，进入高清拼图</button>
+      </section>
+
+      <section class="step-panel" data-panel="2">
+        <p class="panel-lead">系统按所选缩放级别下载小瓦片、精确裁边后拼为一张大图。级别越高越清晰，瓦片数和文件体积也会快速增加。</p>
+        <div class="precision-scale">
+          <div><small>输出精度</small><strong id="zoomLabel">Z18 / 建筑级</strong></div>
+          <input id="mosaicZoom" data-testid="mosaic-zoom" type="range" min="16" max="22" value="20" step="1">
+          <div class="scale-ticks"><span>Z16</span><span>Z17</span><span>Z18</span><span>Z19</span><span>Z20</span><span>Z21</span><span>Z22</span></div>
+        </div>
+        <div class="metric-grid">
+          <div><small>瓦片数量</small><b id="tileCount">0</b></div>
+          <div><small>预计画幅</small><b id="pixelSize">—</b></div>
+          <div><small>地面精度</small><b id="meterPerPixel">—</b></div>
+          <div><small>最大边长</small><b id="groundSpan">—</b></div>
+        </div>
+        <div class="notice warning" id="tileWarning"><b>下载规范</b><span>请确认所选地图服务许可用于你的研究。超大范围建议分区导出并在 GIS/CAD 中拼接。</span></div>
+        <button class="button primary wide" id="createMosaicBtn" data-testid="create-mosaic">生成高清卫星拼图</button>
+        <div class="export-preview" id="mosaicPreview"><span>PNG</span><div><b>尚未生成</b><small>将输出无覆盖原色图 + 带比例尺/指北针展示图</small></div></div>
+        <button class="button dark wide next-step" data-next="3">进入建筑识别</button>
+      </section>
+
+      <section class="step-panel" data-panel="3">
+        <p class="panel-lead">优先调用已配准的 OSM 建筑矢量；影像预描边用于补充缺失区。两种结果都会进入人工核查，不直接冒充最终 CAD。</p>
+        <div class="method-card recommended">
+          <div><span>01 / ALIGN</span><b>OSM 矢量对齐</b><p>坐标准确、轮廓已闭合；适合有公开建筑数据的区域。</p></div>
+          <button id="osmTraceBtn" data-testid="osm-trace">获取</button>
+        </div>
+        <div class="method-card">
+          <div><span>02 / RASTER</span><b>本地影像预描边</b><p>不上传影像，先找候选屋顶；误判必须在下一步删除或重画。</p></div>
+          <button id="rasterTraceBtn" data-testid="raster-trace">运行</button>
+        </div>
+        <label class="range-field"><span>识别灵敏度 <b id="sensitivityLabel">58%</b></span><input id="sensitivity" type="range" min="20" max="90" value="58"></label>
+        <div class="filter-row"><label>最小面积<input id="minArea" type="number" min="5" value="18"></label><label>默认层数<input id="defaultFloors" type="number" min="1" max="20" value="2"></label></div>
+        <label class="select-field">识别结果写入方式<select id="traceMergeMode"><option value="replace">替换当前候选</option><option value="append">追加到人工结果</option></select></label>
+        <button class="button ghost wide" id="filterFootprintsBtn">应用过滤与默认层数</button>
+        <div class="trace-result"><span id="traceMethod">等待识别</span><b id="traceCount">0 个候选轮廓</b></div>
+        <button class="button dark wide next-step" data-next="4">进入轮廓核查</button>
+      </section>
+
+      <section class="step-panel" data-panel="4">
+        <p class="panel-lead">在地图上直接编辑顶点、删除误判或补画建筑。只有“已核查”的闭合建筑进入正式 DWG/白模导出。</p>
+        <div class="review-toolbar">
+          <button id="enableEditBtn" data-testid="edit-footprints">编辑顶点</button>
+          <button id="drawBuildingBtn">开始精绘</button>
+          <button id="deleteSelectedBtn">删除选中</button>
+          <button id="clearAiBtn">清除全部 AI</button>
+          <button id="keepManualBtn">仅保留人工</button>
+          <button id="verifyAllBtn">全部标为已核查</button>
+        </div>
+        <div class="draw-studio">
+          <div class="draw-studio-head"><span>CAD DRAW STUDIO</span><b>人工补画建筑</b></div>
+          <label>绘制方式<select id="buildingDrawMode"><option value="orthogonal">局部平面正交</option><option value="rectangle">两点矩形</option><option value="free">自由多边形</option></select></label>
+          <label class="toggle-field"><input id="continuousDraw" type="checkbox" checked><span>连续绘制，完成一栋后自动开始下一栋</span></label>
+          <div class="area-snap-grid"><label>目标面积 m²<input id="targetBuildingArea" type="number" min="0" step="0.1" placeholder="可选，如 120"></label><label>吸附容差 %<input id="areaSnapTolerance" type="number" min="1" max="100" value="15"></label></div>
+          <div class="button-pair"><button class="button primary" id="startFineDrawBtn">放大并开始</button><button class="button outline" id="stopDrawBtn">结束绘制</button></div>
+          <p id="drawModeHelp">第一条边定义任意旋转的局部施工平面，后续边自动投影为平行或垂直，不锁地图 X/Y 轴。</p>
+        </div>
+        <div class="selection-status" id="selectionStatus">未选中建筑 · 缩放地图不会改变已画轮廓坐标</div>
+        <div class="building-list" id="buildingList"><div class="empty-state">还没有建筑轮廓</div></div>
+        <button class="button ghost wide" id="auditGeometryBtn">检查闭合 / 自交 / 短边</button>
+        <div class="audit-result" id="geometryAudit">尚未执行正式几何审计</div>
+        <div class="cad-standard">
+          <div><small>模型几何</small><b>1:1 米制</b></div><div><small>坐标精度</small><b id="precisionBadge">0.1 m</b></div><div><small>几何标准</small><b>闭合多段线</b></div>
+        </div>
+        <div class="button-pair">
+          <button class="button outline" data-export="dxf" data-testid="export-dxf">导出 DXF</button>
+          <button class="button primary" data-export="dwg" data-testid="export-dwg">导出 DWG</button>
+        </div>
+        <button class="button dark wide next-step" data-next="5">进入照片与层高</button>
+      </section>
+
+      <section class="step-panel" data-panel="5">
+        <p class="panel-lead">照片只在本机读取 EXIF。GPS 点位会落在同一张地图上；楼层先给出待核查字段，由你根据现场照片确认后写回最近建筑。</p>
+        <label class="photo-drop" for="photoInput" data-testid="photo-drop">
+          <input id="photoInput" type="file" multiple accept="image/jpeg,image/png,image/heic,image/webp">
+          <span>+</span><b>拖入或选择现场照片</b><small>支持批量读取 GPS / 时间 / 图像尺寸</small>
+        </label>
+        <div class="photo-list" id="photoList"><div class="empty-state">尚未读取照片</div></div>
+        <button class="button primary wide" id="applyFloorsBtn">将层数写回最近建筑</button>
+        <div class="button-pair"><button class="button outline" id="exportPhotoCsvBtn">导出点位 CSV</button><button class="button outline" id="exportPhotoGeoJsonBtn">导出点位 GeoJSON</button></div>
+        <div class="notice"><b>分析边界</b><span>首版不把照片发给第三方视觉模型；层数必须人工确认。后续可接入经你授权的本地语义模型。</span></div>
+        <button class="button dark wide next-step" data-next="6">生成村落白模</button>
+      </section>
+
+      <section class="step-panel" data-panel="6">
+        <p class="panel-lead">每栋建筑按独立闭合轮廓拉伸：高度 = 层数 × 层高。输出坐标单位为米，保持与 CAD 相同的本地原点。</p>
+        <div class="model-settings">
+          <label>建议单层高度<input id="floorHeight" type="number" min="2.4" max="6" step="0.1" value="3.0"><span>m</span></label>
+          <label>视图旋转<input id="modelAngle" type="range" min="-70" max="70" value="28"></label>
+        </div>
+        <div class="export-standards">
+          <label>几何精度<select id="exportPrecision"><option value="0">1 m</option><option value="1" selected>0.1 m（推荐）</option><option value="2">0.01 m</option><option value="3">0.001 m</option></select></label>
+          <label>CAD 出图比例<select id="plotScale"><option value="100">1:100</option><option value="200">1:200</option><option value="500">1:500</option><option value="1000">1:1000</option></select></label>
+        </div>
+        <div class="notice"><b>昆明建模默认值</b><span>新建住宅参考 GB 55038—2025，单层高度默认 3.0 m；既有村屋差异较大，应以现场照片逐栋校准。所有导出几何始终为 1:1 米制，出图比例不缩放模型。</span></div>
+        <button class="button primary wide" id="previewModelBtn" data-testid="preview-model">生成并检查白模</button>
+        <div class="model-audit">
+          <div><span>闭合建筑</span><b id="modelClosed">0</b></div><div><span>总建筑面积</span><b id="modelArea">0 m²</b></div><div><span>高度范围</span><b id="modelHeightRange">—</b></div>
+        </div>
+        <div class="format-grid">
+          <button data-export="obj"><span>OBJ</span><b>通用白模</b><small>原生生成</small></button>
+          <button data-export="fbx" data-testid="export-fbx"><span>FBX</span><b>交换模型</b><small>原生/ASCII 回退</small></button>
+          <button data-export="skp" data-testid="export-skp"><span>SKP</span><b>SketchUp</b><small id="skpCapability">检测中</small></button>
+          <button data-export="geojson"><span>GEO</span><b>GeoJSON</b><small>坐标归档</small></button>
+        </div>
+        <button class="button ghost wide" id="backToMapBtn">返回地图继续核查</button>
+      </section>
+    </aside>
+  </div>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+  <aside class="theme-drawer" id="themeDrawer" aria-label="界面主题" hidden>
+    <div><small>DESIGN TOKENS</small><b>工作台外观</b><button id="closeThemeBtn" aria-label="关闭">×</button></div>
+    <p>颜色只影响界面与轮廓显示，不写入高清卫图源像素。</p>
+    <label>主强调色<input id="accentColor" type="color" value="#d9f34a"></label>
+    <label>警示色<input id="signalColor" type="color" value="#ff5a4f"></label>
+    <label>界面密度<select id="densitySelect"><option value="compact">紧凑</option><option value="comfortable">舒适</option></select></label>
+    <div class="theme-presets"><button data-theme-preset="field">田野绿</button><button data-theme-preset="cyan">测绘蓝</button><button data-theme-preset="amber">图志橙</button></div>
+  </aside>
+  <aside class="project-drawer" id="projectDrawer" aria-label="工程文件管理" hidden>
+    <div><small>PROJECT ARCHIVE</small><b>工程文件管理</b><button id="closeProjectDrawerBtn" aria-label="关闭">×</button></div>
+    <p>保存完整边界、拼图引用、建筑轮廓、逐栋高度和照片点位。工程文件扩展名为 .tqproject.json。</p>
+    <button class="button primary wide" id="saveProjectFolderBtn">保存到指定文件夹</button>
+    <button class="button outline wide" id="openProjectFolderBtn">从文件夹提取工程</button>
+    <button class="button outline wide" id="importProjectFileBtn">导入单个工程文件</button>
+    <input id="projectFolderInput" type="file" webkitdirectory directory multiple accept="application/json,.json" hidden>
+    <input id="projectFileInput" type="file" accept="application/json,.json,.tqproject" hidden>
+    <div class="project-danger"><b>删除当前网页工程</b><span>只删除 data/projects 中的项目；已经另存到文件夹的工程文件不会删除。</span><button id="deleteProjectBtn">删除当前工程</button></div>
+  </aside>
+  <div class="busy-overlay" id="busyOverlay" hidden>
+    <div class="busy-card"><i></i><span id="busyKicker">PROCESSING</span><b id="busyTitle">正在处理</b><small id="busyDetail">请保持本地服务运行</small></div>
+  </div>
+
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script src="/static/vendor/leaflet-draw/leaflet.draw.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
